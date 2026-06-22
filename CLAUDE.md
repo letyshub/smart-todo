@@ -105,9 +105,9 @@ See `src-tauri/src/db.rs` for full schema with migrations.
 
 | Phase | Tasks | Status |
 |---|---|---|
-| 1 — Foundation | Scaffold, Tailwind, DB, Lists CRUD | 🔄 In progress |
-| 2 — Task Editor | Tasks CRUD, Settings, TS layer, Stores | ⏳ Pending |
-| 3 — UI Core | App layout, Sidebar, TaskCard, ListDetail | ⏳ Pending |
-| 4 — Rich Features | TaskEditor, Markdown, Tags | ⏳ Pending |
-| 5 — Dashboard & Settings | Dashboard page, Settings page | ⏳ Pending |
-| 6 — Tests & Build | Full test suite, production build | ⏳ Pending |
+| 1 — Foundation | Scaffold, Tailwind, DB, Lists CRUD | ✅ Done |
+| 2 — Task Editor | Tasks CRUD, Settings, TS layer, Stores | ✅ Done |
+| 3 — UI Core | App layout, Sidebar, TaskCard, ListDetail | ✅ Done |
+| 4 — Rich Features | TaskEditor, Markdown, Tags | ✅ Done |
+| 5 — Dashboard & Settings | Dashboard page, Settings page | ✅ Done |
+| 6 — Tests & Build | Full test suite, production build | ✅ Done |
