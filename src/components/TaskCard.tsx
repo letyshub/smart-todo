@@ -55,7 +55,11 @@ export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
       {/* Right side: due date, total time, timer */}
       <div className="flex items-center gap-2 shrink-0">
         {task.due_date && (
-          <span className={`text-xs ${overdue || dueToday ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${
+            overdue || dueToday
+              ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+          }`}>
             {formatDueDate(task.due_date)}
           </span>
         )}
