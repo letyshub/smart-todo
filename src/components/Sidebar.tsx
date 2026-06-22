@@ -36,7 +36,7 @@ export default function Sidebar({ view, onNavigate }: Props) {
         className={navItem(view.type === 'dashboard')}
         onClick={() => onNavigate({ type: 'dashboard' })}
       >
-        <span>📋</span> Dashboard
+        <span aria-hidden="true">📋</span> Dashboard
       </button>
 
       <hr className="border-gray-200 dark:border-gray-700 my-1" />
@@ -64,6 +64,7 @@ export default function Sidebar({ view, onNavigate }: Props) {
             <input
               autoFocus
               className="flex-1 text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none"
+              aria-label="List name"
               placeholder="List name…"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
@@ -87,7 +88,7 @@ export default function Sidebar({ view, onNavigate }: Props) {
         className={navItem(view.type === 'settings')}
         onClick={() => onNavigate({ type: 'settings' })}
       >
-        <span>⚙</span> Settings
+        <span aria-hidden="true">⚙</span> Settings
       </button>
     </aside>
   )

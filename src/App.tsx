@@ -16,7 +16,7 @@ export default function App() {
   useEffect(() => {
     loadLists()
     loadSettings()
-  }, [])
+  }, [loadLists, loadSettings])
 
   return (
     <div className="flex h-screen overflow-hidden bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
