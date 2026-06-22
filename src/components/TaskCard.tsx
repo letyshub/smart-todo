@@ -22,6 +22,7 @@ export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
       <input
         type="checkbox"
         checked={task.completed}
+        onClick={(e) => e.stopPropagation()}
         onChange={(e) => { e.stopPropagation(); onToggleComplete(task) }}
         className="w-4 h-4 rounded accent-indigo-600 cursor-pointer shrink-0"
       />

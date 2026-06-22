@@ -69,4 +69,13 @@ describe('TaskCard', () => {
     render(<TaskCard task={task} onOpen={vi.fn()} onToggleComplete={vi.fn()} />)
     expect(screen.getByText(/Dec/)).toBeTruthy()
   })
+
+  it('checkbox click does not also call onOpen (stopPropagation)', () => {
+    const onOpen = vi.fn()
+    const onToggleComplete = vi.fn()
+    render(<TaskCard task={baseTask} onOpen={onOpen} onToggleComplete={onToggleComplete} />)
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(onToggleComplete).toHaveBeenCalledWith(baseTask)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
 })
