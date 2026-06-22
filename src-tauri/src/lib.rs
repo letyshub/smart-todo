@@ -6,6 +6,8 @@ use commands::timer::TimerState;
 use std::sync::Mutex;
 use std::collections::HashMap;
 
+pub struct DbPath(pub String);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_data_dir = dirs::data_local_dir()
@@ -20,6 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(DbState(Mutex::new(conn)))
         .manage(TimerState(Mutex::new(HashMap::new())))
+        .manage(DbPath(db_path))
         .invoke_handler(tauri::generate_handler![
             commands::lists::get_lists,
             commands::lists::create_list,
