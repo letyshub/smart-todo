@@ -99,19 +99,17 @@ export default function TaskEditor({ task, listId, onClose }: Props) {
         />
 
         {/* Priority */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-20">Priority</span>
-          <button
-            onClick={handlePriorityToggle}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              task.priority === 'high'
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-            }`}
-          >
-            {task.priority === 'high' ? '⚑ High' : 'Normal'}
-          </button>
-        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={task.priority === 'high'}
+            onChange={handlePriorityToggle}
+            className="w-4 h-4 accent-red-500 cursor-pointer"
+          />
+          <span className={`text-sm ${task.priority === 'high' ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+            High priority
+          </span>
+        </label>
 
         {/* Due Date */}
         <div className="flex items-center gap-2">
@@ -174,9 +172,9 @@ export default function TaskEditor({ task, listId, onClose }: Props) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-500">Timer</span>
-            {totalSeconds > 0 && (
-              <span className="text-xs text-gray-400">{formatTotal(totalSeconds)} total</span>
-            )}
+            <span className="text-xs text-gray-400">
+              {totalSeconds > 0 ? `${formatTotal(totalSeconds)} total` : 'No time tracked'}
+            </span>
           </div>
           <button
             onClick={handleTimerToggle}

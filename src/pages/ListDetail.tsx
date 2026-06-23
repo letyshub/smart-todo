@@ -116,14 +116,17 @@ export default function ListDetail({ listId }: Props) {
         )}
       </div>
 
-      {/* Task editor drawer (Task 12 will fill this in) */}
-      {selectedTask && (
-        <TaskEditor
-          task={selectedTask}
-          listId={listId}
-          onClose={() => setSelectedTask(null)}
-        />
-      )}
+      {/* Derive live task from store so TaskEditor always sees fresh data */}
+      {selectedTask && (() => {
+        const liveTask = listTasks.find(t => t.id === selectedTask.id) ?? selectedTask
+        return (
+          <TaskEditor
+            task={liveTask}
+            listId={listId}
+            onClose={() => setSelectedTask(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
