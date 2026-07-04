@@ -2,11 +2,14 @@
 
 <#
 .SYNOPSIS
-    Publish Smart Todo to D:\Programs\smart-todo
+    Publish Smart Todo to the configured deploy directory.
 
 .DESCRIPTION
     Auto-bumps patch version, builds with Tauri, backs up previous .exe,
-    deploys new .exe to D:\Programs\smart-todo.
+    deploys new .exe to the path defined in publish.config.ps1.
+
+    FIRST TIME SETUP:
+    Copy publish.config.example.ps1 to publish.config.ps1 and set $DeployDir.
 
     RE-RUN AFTER BUILD FAILURE:
     If the build fails, the version was already bumped and committed.
@@ -23,9 +26,15 @@ param()
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
-# Config
+# Config — loaded from publish.config.ps1 (gitignored, copy from example)
 # ---------------------------------------------------------------------------
-$DeployDir = "D:\Programs\smart-todo"
+$ConfigFile = Join-Path $PSScriptRoot "publish.config.ps1"
+if (-not (Test-Path $ConfigFile)) {
+    Write-Error "Missing publish.config.ps1 — copy publish.config.example.ps1 to publish.config.ps1 and set your deploy path."
+    exit 1
+}
+. $ConfigFile
+
 $BackupDir = "$DeployDir\backups"
 $LogDir    = "$DeployDir\logs"
 $ExeName   = "smart-todo.exe"

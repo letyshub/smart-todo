@@ -15,6 +15,9 @@ dist
 dist-ssr
 *.local
 
+# Publish script local config
+publish.config.ps1
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
