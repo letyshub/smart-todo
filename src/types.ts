@@ -24,6 +24,9 @@ export interface Task {
   position: number
   created_at: string
   updated_at: string
+  parent_task_id: number | null
+  is_subtask: boolean
+  status: 'todo' | 'inprogress' | 'done'
   tags: Tag[]
   total_seconds: number
 }

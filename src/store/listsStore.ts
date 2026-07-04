@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../lib/tauri'
 import type { List } from '../types'
+import { useTasksStore } from './tasksStore'
 
 interface ListsStore {
   lists: List[]
@@ -31,5 +32,11 @@ export const useListsStore = create<ListsStore>((set) => ({
   remove: async (id) => {
     await api.deleteList(id)
     set((s) => ({ lists: s.lists.filter((l) => l.id !== id) }))
+    const { loadDashboard, tasks } = useTasksStore.getState()
+    const withoutDeleted = Object.fromEntries(
+      Object.entries(tasks).filter(([k]) => Number(k) !== id)
+    )
+    useTasksStore.setState({ tasks: withoutDeleted })
+    await loadDashboard()
   },
 }))

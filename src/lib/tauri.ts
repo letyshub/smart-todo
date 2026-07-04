@@ -17,9 +17,17 @@ export const api = {
     invoke<Task>('create_task', { listId, title, priority, dueDate, description }),
   updateTask: (
     id: number,
-    fields: { title?: string; description?: string; priority?: string; dueDate?: string; completed?: boolean; position?: number }
+    fields: { title?: string; description?: string; priority?: string; dueDate?: string; completed?: boolean; position?: number; status?: string }
   ) => invoke<Task>('update_task', { id, ...fields }),
   deleteTask: (id: number) => invoke<void>('delete_task', { id }),
+  createSubtask: (parentTaskId: number, title: string) =>
+    invoke<Task>('create_subtask', { parentTaskId, title }),
+  getSubtasks: (taskId: number) =>
+    invoke<Task[]>('get_subtasks', { taskId }),
+  createChildTask: (parentTaskId: number, title: string) =>
+    invoke<Task>('create_child_task', { parentTaskId, title }),
+  getChildTasks: (taskId: number) =>
+    invoke<Task[]>('get_child_tasks', { taskId }),
   getDashboardTasks: () => invoke<DashboardData>('get_dashboard_tasks'),
   setTaskTags: (taskId: number, tagNames: string[]) =>
     invoke<Tag[]>('set_task_tags', { taskId, tagNames }),

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../lib/tauri'
-import type { Task, DashboardData } from '../types'
+import type { Task, Tag, DashboardData } from '../types'
 
 interface TasksStore {
   tasks: Record<number, Task[]>
@@ -8,9 +8,9 @@ interface TasksStore {
   loadList: (listId: number) => Promise<void>
   loadDashboard: () => Promise<void>
   create: (listId: number, title: string) => Promise<Task>
-  update: (id: number, listId: number, fields: Parameters<typeof api.updateTask>[1]) => Promise<void>
+  update: (id: number, listId: number, fields: Parameters<typeof api.updateTask>[1]) => Promise<Task>
   remove: (id: number, listId: number) => Promise<void>
-  setTags: (taskId: number, listId: number, tagNames: string[]) => Promise<void>
+  setTags: (taskId: number, listId: number, tagNames: string[]) => Promise<Tag[]>
 }
 
 export const useTasksStore = create<TasksStore>((set) => ({
@@ -37,6 +37,7 @@ export const useTasksStore = create<TasksStore>((set) => ({
         [listId]: (s.tasks[listId] ?? []).map((t) => (t.id === id ? updated : t)),
       },
     }))
+    return updated
   },
   remove: async (id, listId) => {
     await api.deleteTask(id)
@@ -57,5 +58,6 @@ export const useTasksStore = create<TasksStore>((set) => ({
         ),
       },
     }))
+    return tags
   },
 }))

@@ -7,9 +7,10 @@ interface Props {
   task: Task
   onOpen: (task: Task) => void
   onToggleComplete: (task: Task) => void
+  onDelete?: (task: Task) => void
 }
 
-export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
+export default function TaskCard({ task, onOpen, onToggleComplete, onDelete }: Props) {
   const overdue = !task.completed && isOverdue(task.due_date)
   const dueToday = !task.completed && isDueToday(task.due_date)
 
@@ -33,12 +34,14 @@ export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
           {task.priority === 'high' && (
             <span className="text-red-500 text-xs shrink-0" title="High priority">⚑</span>
           )}
+          {task.status === 'inprogress' && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shrink-0">In Progress</span>
+          )}
           <span className={`text-sm font-medium truncate ${task.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
             {task.title}
           </span>
         </div>
 
-        {/* Tags */}
         {task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {task.tags.map((tag) => (
@@ -53,7 +56,7 @@ export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
         )}
       </div>
 
-      {/* Right side: due date, total time, timer */}
+      {/* Right side */}
       <div className="flex items-center gap-2 shrink-0">
         {task.due_date && (
           <span className={`text-xs px-1.5 py-0.5 rounded ${
@@ -70,6 +73,15 @@ export default function TaskCard({ task, onOpen, onToggleComplete }: Props) {
           </span>
         )}
         {!task.completed && <TimerWidget taskId={task.id} />}
+        {onDelete && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(task) }}
+            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+            aria-label={`Delete task ${task.title}`}
+          >
+            ×
+          </button>
+        )}
       </div>
     </div>
   )

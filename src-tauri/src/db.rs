@@ -21,17 +21,19 @@ fn migrate(conn: &Connection) -> Result<()> {
         );
 
         CREATE TABLE IF NOT EXISTS tasks (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            list_id      INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-            title        TEXT NOT NULL,
-            description  TEXT,
-            priority     TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','high')),
-            due_date     TEXT,
-            completed    INTEGER NOT NULL DEFAULT 0,
-            completed_at TEXT,
-            position     INTEGER NOT NULL DEFAULT 0,
-            created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_id         INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+            parent_task_id  INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+            title           TEXT NOT NULL,
+            description     TEXT,
+            priority        TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','high')),
+            due_date        TEXT,
+            completed       INTEGER NOT NULL DEFAULT 0,
+            completed_at    TEXT,
+            position        INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            status          TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo','inprogress','done'))
         );
 
         CREATE TABLE IF NOT EXISTS tags (
@@ -58,7 +60,21 @@ fn migrate(conn: &Connection) -> Result<()> {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-    ")
+    ")?;
+    // Idempotent column add for existing databases — ignored if column already exists
+    conn.execute(
+        "ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE",
+        [],
+    ).ok();
+    conn.execute(
+        "ALTER TABLE tasks ADD COLUMN is_subtask INTEGER NOT NULL DEFAULT 0",
+        [],
+    ).ok();
+    conn.execute(
+        "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'todo'",
+        [],
+    ).ok();
+    Ok(())
 }
 
 #[cfg(test)]

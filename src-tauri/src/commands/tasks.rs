@@ -22,6 +22,9 @@ pub struct Task {
     pub position: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub parent_task_id: Option<i64>,
+    pub is_subtask: bool,
+    pub status: String,
     pub tags: Vec<Tag>,
     pub total_seconds: i64,
 }
@@ -58,6 +61,13 @@ fn fetch_total_seconds(conn: &rusqlite::Connection, task_id: i64) -> i64 {
     .unwrap_or(0)
 }
 
+// SELECT column order: 0=id 1=list_id 2=title 3=description 4=priority 5=due_date
+//   6=completed 7=completed_at 8=position 9=created_at 10=updated_at
+//   11=parent_task_id 12=is_subtask 13=status
+const TASK_COLS: &str =
+    "id,list_id,title,description,priority,due_date,completed,completed_at,\
+     position,created_at,updated_at,parent_task_id,is_subtask,status";
+
 fn row_to_task(row: &rusqlite::Row, conn: &rusqlite::Connection) -> rusqlite::Result<Task> {
     let id: i64 = row.get(0)?;
     let tags = fetch_tags_for_task(conn, id);
@@ -74,6 +84,9 @@ fn row_to_task(row: &rusqlite::Row, conn: &rusqlite::Connection) -> rusqlite::Re
         position: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        parent_task_id: row.get(11)?,
+        is_subtask: row.get::<_, i64>(12)? != 0,
+        status: row.get(13)?,
         tags,
         total_seconds,
     })
@@ -82,13 +95,11 @@ fn row_to_task(row: &rusqlite::Row, conn: &rusqlite::Connection) -> rusqlite::Re
 #[tauri::command]
 pub fn get_tasks(state: State<DbState>, list_id: i64) -> Result<Vec<Task>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id,list_id,title,description,priority,due_date,completed,completed_at,
-                    position,created_at,updated_at
-             FROM tasks WHERE list_id=?1 ORDER BY completed ASC, position ASC",
-        )
-        .map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {TASK_COLS} FROM tasks WHERE list_id=?1 AND parent_task_id IS NULL \
+         ORDER BY completed ASC, position ASC"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let tasks: Vec<Task> = stmt
         .query_map(rusqlite::params![list_id], |row| row_to_task(row, &conn))
         .map_err(|e| e.to_string())?
@@ -109,7 +120,7 @@ pub fn create_task(
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let position: i64 = conn
         .query_row(
-            "SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE list_id = ?1",
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE list_id = ?1 AND parent_task_id IS NULL",
             rusqlite::params![list_id],
             |r| r.get(0),
         )
@@ -122,13 +133,9 @@ pub fn create_task(
     )
     .map_err(|e| e.to_string())?;
     let id = conn.last_insert_rowid();
-    conn.query_row(
-        "SELECT id,list_id,title,description,priority,due_date,completed,completed_at,
-                position,created_at,updated_at FROM tasks WHERE id=?1",
-        rusqlite::params![id],
-        |row| row_to_task(row, &conn),
-    )
-    .map_err(|e| e.to_string())
+    let sql = format!("SELECT {TASK_COLS} FROM tasks WHERE id=?1");
+    conn.query_row(&sql, rusqlite::params![id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -141,6 +148,7 @@ pub fn update_task(
     due_date: Option<String>,
     completed: Option<bool>,
     position: Option<i64>,
+    status: Option<String>,
 ) -> Result<Task, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(v) = title {
@@ -160,24 +168,32 @@ pub fn update_task(
         conn.execute("UPDATE tasks SET due_date=?1,updated_at=datetime('now') WHERE id=?2",
             rusqlite::params![val, id]).map_err(|e| e.to_string())?;
     }
-    if let Some(v) = completed {
+    if let Some(v) = status {
+        // Sync completed with status
+        let done = if v == "done" { 1i64 } else { 0i64 };
         conn.execute(
-            "UPDATE tasks SET completed=?1,completed_at=CASE WHEN ?1=1 THEN datetime('now') ELSE NULL END,
-             updated_at=datetime('now') WHERE id=?2",
-            rusqlite::params![v as i64, id],
+            "UPDATE tasks SET status=?1,completed=?2,\
+             completed_at=CASE WHEN ?2=1 THEN datetime('now') ELSE NULL END,\
+             updated_at=datetime('now') WHERE id=?3",
+            rusqlite::params![v, done, id],
+        ).map_err(|e| e.to_string())?;
+    } else if let Some(v) = completed {
+        // Sync status with completed
+        let status = if v { "done" } else { "todo" };
+        conn.execute(
+            "UPDATE tasks SET completed=?1,status=?2,\
+             completed_at=CASE WHEN ?1=1 THEN datetime('now') ELSE NULL END,\
+             updated_at=datetime('now') WHERE id=?3",
+            rusqlite::params![v as i64, status, id],
         ).map_err(|e| e.to_string())?;
     }
     if let Some(v) = position {
         conn.execute("UPDATE tasks SET position=?1,updated_at=datetime('now') WHERE id=?2",
             rusqlite::params![v, id]).map_err(|e| e.to_string())?;
     }
-    conn.query_row(
-        "SELECT id,list_id,title,description,priority,due_date,completed,completed_at,
-                position,created_at,updated_at FROM tasks WHERE id=?1",
-        rusqlite::params![id],
-        |row| row_to_task(row, &conn),
-    )
-    .map_err(|e| e.to_string())
+    let sql = format!("SELECT {TASK_COLS} FROM tasks WHERE id=?1");
+    conn.query_row(&sql, rusqlite::params![id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -236,8 +252,9 @@ pub fn get_dashboard_tasks(state: State<DbState>) -> Result<DashboardData, Strin
         .format("%Y-%m-%d")
         .to_string();
 
-    let base = "SELECT id,list_id,title,description,priority,due_date,completed,completed_at,
-                        position,created_at,updated_at FROM tasks WHERE completed=0";
+    let base = format!(
+        "SELECT {TASK_COLS} FROM tasks WHERE completed=0 AND parent_task_id IS NULL"
+    );
 
     let mut stmt = conn.prepare(
         &format!("{base} AND due_date IS NOT NULL AND due_date <= ?1 ORDER BY due_date ASC, priority DESC")
@@ -259,9 +276,6 @@ pub fn get_dashboard_tasks(state: State<DbState>) -> Result<DashboardData, Strin
         .filter(|t| !overdue_ids.contains(&t.id))
         .collect();
 
-    let mut exclude_ids = overdue_ids.clone();
-    exclude_ids.extend(high_priority.iter().map(|t| t.id));
-
     let mut stmt3 = conn.prepare(
         &format!("{base} AND due_date IS NOT NULL AND due_date > ?1 AND due_date <= ?2 ORDER BY due_date ASC")
     ).map_err(|e| e.to_string())?;
@@ -269,10 +283,98 @@ pub fn get_dashboard_tasks(state: State<DbState>) -> Result<DashboardData, Strin
         .query_map(rusqlite::params![today, upcoming_limit], |row| row_to_task(row, &conn))
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
-        .filter(|t| !exclude_ids.contains(&t.id))
+        .filter(|t| !overdue_ids.contains(&t.id))
         .collect();
 
     Ok(DashboardData { overdue, high_priority, upcoming })
+}
+
+#[tauri::command]
+pub fn create_subtask(
+    state: State<DbState>,
+    parent_task_id: i64,
+    title: String,
+) -> Result<Task, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let list_id: i64 = conn
+        .query_row("SELECT list_id FROM tasks WHERE id = ?1", rusqlite::params![parent_task_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let position: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE parent_task_id = ?1 AND is_subtask = 1",
+            rusqlite::params![parent_task_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, priority, position)
+         VALUES (?1, ?2, 1, ?3, 'normal', ?4)",
+        rusqlite::params![list_id, parent_task_id, title, position],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let sql = format!("SELECT {TASK_COLS} FROM tasks WHERE id=?1");
+    conn.query_row(&sql, rusqlite::params![id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_subtasks(state: State<DbState>, task_id: i64) -> Result<Vec<Task>, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {TASK_COLS} FROM tasks WHERE parent_task_id=?1 AND is_subtask=1 ORDER BY position ASC"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks: Vec<Task> = stmt
+        .query_map(rusqlite::params![task_id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(tasks)
+}
+
+#[tauri::command]
+pub fn create_child_task(
+    state: State<DbState>,
+    parent_task_id: i64,
+    title: String,
+) -> Result<Task, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let list_id: i64 = conn
+        .query_row("SELECT list_id FROM tasks WHERE id = ?1", rusqlite::params![parent_task_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let position: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE parent_task_id = ?1 AND is_subtask = 0",
+            rusqlite::params![parent_task_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, priority, position)
+         VALUES (?1, ?2, 0, ?3, 'normal', ?4)",
+        rusqlite::params![list_id, parent_task_id, title, position],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    let sql = format!("SELECT {TASK_COLS} FROM tasks WHERE id=?1");
+    conn.query_row(&sql, rusqlite::params![id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_child_tasks(state: State<DbState>, task_id: i64) -> Result<Vec<Task>, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {TASK_COLS} FROM tasks WHERE parent_task_id=?1 AND is_subtask=0 ORDER BY completed ASC, position ASC"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks: Vec<Task> = stmt
+        .query_map(rusqlite::params![task_id], |row| row_to_task(row, &conn))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(tasks)
 }
 
 #[cfg(test)]
@@ -299,6 +401,89 @@ mod tests {
             |r| r.get(0),
         ).unwrap();
         assert_eq!(title, "My Task");
+    }
+
+    #[test]
+    fn test_create_subtask() {
+        let (conn, list_id) = setup();
+        conn.execute(
+            "INSERT INTO tasks (list_id, title, priority, position) VALUES (?1, 'Parent', 'normal', 0)",
+            rusqlite::params![list_id],
+        ).unwrap();
+        let parent_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, priority, position) VALUES (?1, ?2, 1, 'Sub', 'normal', 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        let (subtask_parent, is_sub): (i64, i64) = conn.query_row(
+            "SELECT parent_task_id, is_subtask FROM tasks WHERE title='Sub'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(subtask_parent, parent_id);
+        assert_eq!(is_sub, 1);
+    }
+
+    #[test]
+    fn test_create_child_task() {
+        let (conn, list_id) = setup();
+        conn.execute(
+            "INSERT INTO tasks (list_id, title, priority, position) VALUES (?1, 'Parent', 'normal', 0)",
+            rusqlite::params![list_id],
+        ).unwrap();
+        let parent_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, priority, position) VALUES (?1, ?2, 0, 'Child', 'normal', 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        let (child_parent, is_sub): (i64, i64) = conn.query_row(
+            "SELECT parent_task_id, is_subtask FROM tasks WHERE title='Child'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(child_parent, parent_id);
+        assert_eq!(is_sub, 0);
+    }
+
+    #[test]
+    fn test_delete_parent_cascades_subtasks() {
+        let (conn, list_id) = setup();
+        conn.execute(
+            "INSERT INTO tasks (list_id, title, priority, position) VALUES (?1, 'Parent', 'normal', 0)",
+            rusqlite::params![list_id],
+        ).unwrap();
+        let parent_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, title, priority, position) VALUES (?1, ?2, 'Sub', 'normal', 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        conn.execute("DELETE FROM tasks WHERE id=?1", rusqlite::params![parent_id]).unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task_id=?1",
+            rusqlite::params![parent_id],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_get_tasks_excludes_subtasks() {
+        let (conn, list_id) = setup();
+        conn.execute(
+            "INSERT INTO tasks (list_id, title, priority, position) VALUES (?1, 'Parent', 'normal', 0)",
+            rusqlite::params![list_id],
+        ).unwrap();
+        let parent_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, title, priority, position) VALUES (?1, ?2, 'Sub', 'normal', 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE list_id=?1 AND parent_task_id IS NULL",
+            rusqlite::params![list_id],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]

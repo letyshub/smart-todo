@@ -15,6 +15,9 @@ const baseTask: Task = {
   position: 0,
   created_at: '2026-06-20T00:00:00',
   updated_at: '2026-06-20T00:00:00',
+  parent_task_id: null,
+  is_subtask: false,
+  status: 'todo' as const,
   tags: [],
   total_seconds: 0,
 }

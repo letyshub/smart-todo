@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { Task } from '../types'
 import type { View } from '../App'
 import { useListsStore } from '../store/listsStore'
@@ -11,23 +11,50 @@ interface Props {
   onNavigate: (v: View) => void
 }
 
-export default function ListDetail({ listId }: Props) {
+export default function ListDetail({ listId, onNavigate }: Props) {
   const lists = useListsStore((s) => s.lists)
-  const { tasks, loadList, create, update } = useTasksStore()
+  const { update: updateList, remove: removeList } = useListsStore()
+  const { tasks, loadList, create, update, remove } = useTasksStore()
   const list = lists.find((l) => l.id === listId)
   const listTasks = tasks[listId] ?? []
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [previousTask, setPreviousTask] = useState<Task | null>(null)
   const [showCompleted, setShowCompleted] = useState(false)
   const [addingTitle, setAddingTitle] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const [confirmDeleteList, setConfirmDeleteList] = useState(false)
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null)
 
   useEffect(() => {
     loadList(listId)
   }, [listId, loadList])
 
-  const incomplete = listTasks.filter((t) => !t.completed)
-  const completed = listTasks.filter((t) => t.completed)
+  useEffect(() => {
+    if (list) setTitleDraft(list.title)
+  }, [list?.id])
+
+  // Reset tag filter when switching lists
+  useEffect(() => {
+    setActiveTagFilter(null)
+  }, [listId])
+
+  // Collect unique tags present in this list
+  const allTags = Array.from(
+    new Map(
+      listTasks.flatMap((t) => t.tags).map((tag) => [tag.name, tag])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name))
+
+  const filterByTag = (tasks: Task[]) =>
+    activeTagFilter ? tasks.filter((t) => t.tags.some((tag) => tag.name === activeTagFilter)) : tasks
+
+  const incomplete = filterByTag(listTasks.filter((t) => !t.completed))
+  const completed = filterByTag(listTasks.filter((t) => t.completed))
 
   async function handleAdd() {
     const title = addingTitle.trim()
@@ -42,9 +69,44 @@ export default function ListDetail({ listId }: Props) {
     await update(task.id, listId, { completed: !task.completed })
   }
 
+  async function handleDeleteTask(task: Task) {
+    if (!window.confirm(`Delete "${task.title}"?`)) return
+    if (selectedTask?.id === task.id) setSelectedTask(null)
+    await remove(task.id, listId)
+  }
+
+  function handleStartEditTitle() {
+    setTitleDraft(list?.title ?? '')
+    setEditingTitle(true)
+    setTimeout(() => titleInputRef.current?.select(), 0)
+  }
+
+  async function handleSaveTitle() {
+    setEditingTitle(false)
+    const trimmed = titleDraft.trim()
+    if (trimmed && trimmed !== list?.title) {
+      await updateList(listId, trimmed)
+    }
+  }
+
+  function handleOpenChildTask(child: Task) {
+    setPreviousTask(selectedTask)
+    setSelectedTask(child)
+  }
+
+  function handleBackFromChild() {
+    const liveParent = listTasks.find((t) => t.id === previousTask?.id) ?? previousTask
+    setSelectedTask(liveParent)
+    setPreviousTask(null)
+  }
+
+  async function handleDeleteList() {
+    await removeList(listId)
+    onNavigate({ type: 'dashboard' })
+  }
+
   return (
     <div className="flex h-full">
-      {/* Task list */}
       <div className="flex-1 overflow-y-auto">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
@@ -54,10 +116,74 @@ export default function ListDetail({ listId }: Props) {
               style={{ backgroundColor: list.color }}
             />
           )}
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            {list?.title ?? 'List'}
-          </h2>
+
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              autoFocus
+              className="text-xl font-semibold bg-transparent border-b border-indigo-400 outline-none text-gray-900 dark:text-gray-100 flex-1"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={handleSaveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveTitle()
+                if (e.key === 'Escape') setEditingTitle(false)
+              }}
+            />
+          ) : (
+            <h2
+              className="text-xl font-semibold text-gray-900 dark:text-gray-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex-1"
+              onClick={handleStartEditTitle}
+              title="Click to rename"
+            >
+              {list?.title ?? 'List'}
+            </h2>
+          )}
+
+          {confirmDeleteList ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={handleDeleteList}
+                className="text-xs px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmDeleteList(false)}
+                className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDeleteList(true)}
+              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded px-2 py-1 text-xs font-medium transition-colors shrink-0"
+              title="Delete list"
+            >
+              Delete list
+            </button>
+          )}
         </div>
+
+        {/* Tag filter bar */}
+        {allTags.length > 0 && (
+          <div className="px-4 py-2 flex flex-wrap gap-1.5 border-b border-gray-100 dark:border-gray-800">
+            {allTags.map((tag) => (
+              <button
+                key={tag.name}
+                onClick={() => setActiveTagFilter(activeTagFilter === tag.name ? null : tag.name)}
+                className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+                  activeTagFilter === tag.name
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800'
+                }`}
+              >
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Incomplete tasks */}
         {incomplete.map((task) => (
@@ -66,6 +192,7 @@ export default function ListDetail({ listId }: Props) {
             task={task}
             onOpen={setSelectedTask}
             onToggleComplete={handleToggleComplete}
+            onDelete={handleDeleteTask}
           />
         ))}
 
@@ -94,7 +221,7 @@ export default function ListDetail({ listId }: Props) {
           </button>
         )}
 
-        {/* Completed tasks disclosure */}
+        {/* Completed tasks */}
         {completed.length > 0 && (
           <div className="mt-4">
             <button
@@ -110,20 +237,23 @@ export default function ListDetail({ listId }: Props) {
                 task={task}
                 onOpen={setSelectedTask}
                 onToggleComplete={handleToggleComplete}
+                onDelete={handleDeleteTask}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Derive live task from store so TaskEditor always sees fresh data */}
       {selectedTask && (() => {
-        const liveTask = listTasks.find(t => t.id === selectedTask.id) ?? selectedTask
+        const liveTask = listTasks.find((t) => t.id === selectedTask.id) ?? selectedTask
         return (
           <TaskEditor
             task={liveTask}
             listId={listId}
-            onClose={() => setSelectedTask(null)}
+            onClose={() => { setSelectedTask(null); setPreviousTask(null) }}
+            parentTask={previousTask ?? undefined}
+            onBack={previousTask ? handleBackFromChild : undefined}
+            onOpenChildTask={handleOpenChildTask}
           />
         )
       })()}

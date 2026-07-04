@@ -8,15 +8,8 @@ interface Props {
 }
 
 export default function Sidebar({ view, onNavigate }: Props) {
-  const { lists, create, remove } = useListsStore()
+  const { lists, create } = useListsStore()
 
-  async function handleDeleteList(id: number) {
-    if (!window.confirm('Delete this list and all its tasks?')) return
-    await remove(id)
-    if (view.type === 'list' && view.id === id) {
-      onNavigate({ type: 'dashboard' })
-    }
-  }
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
 
@@ -51,26 +44,17 @@ export default function Sidebar({ view, onNavigate }: Props) {
 
       <div className="flex-1 overflow-y-auto space-y-0.5">
         {lists.map((list) => (
-          <div key={list.id} className="relative group/item">
-            <button
-              className={`${navItem(view.type === 'list' && view.id === list.id)} w-full pr-7`}
-              onClick={() => onNavigate({ type: 'list', id: list.id })}
-            >
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: list.color ?? '#6366f1' }}
-              />
-              <span className="truncate flex-1 text-left">{list.title}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDeleteList(list.id)}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded opacity-0 group-hover/item:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-opacity text-base leading-none"
-              aria-label={`Delete list ${list.title}`}
-            >
-              ×
-            </button>
-          </div>
+          <button
+            key={list.id}
+            className={`${navItem(view.type === 'list' && view.id === list.id)} w-full`}
+            onClick={() => onNavigate({ type: 'list', id: list.id })}
+          >
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: list.color ?? '#6366f1' }}
+            />
+            <span className="truncate flex-1 text-left">{list.title}</span>
+          </button>
         ))}
 
         {adding ? (
