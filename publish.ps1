@@ -90,13 +90,16 @@ $newVersion = "$($parts[0]).$($parts[1]).$([int]$parts[2] + 1)"
 
 Write-Log "Wersja: $oldVersion -> $newVersion"
 
+# UTF-8 without BOM — Encoding.UTF8 adds BOM which breaks JSON parsers
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+
 # tauri.conf.json — replace "version": "X.Y.Z"
 $content = Get-Content $tauriConfPath -Raw
 $content = $content -replace '"version":\s*"[\d\.]+"', "`"version`": `"$newVersion`""
 [System.IO.File]::WriteAllText(
     (Resolve-Path $tauriConfPath).Path,
     $content,
-    [System.Text.Encoding]::UTF8
+    $utf8NoBom
 )
 Write-Log "Zaktualizowano tauri.conf.json"
 
@@ -106,7 +109,7 @@ $content = $content -replace '"version":\s*"[\d\.]+"', "`"version`": `"$newVersi
 [System.IO.File]::WriteAllText(
     (Resolve-Path $packagePath).Path,
     $content,
-    [System.Text.Encoding]::UTF8
+    $utf8NoBom
 )
 Write-Log "Zaktualizowano package.json"
 
@@ -116,7 +119,7 @@ $content = $content -replace '(?m)^version = "[\d\.]+"', "version = `"$newVersio
 [System.IO.File]::WriteAllText(
     (Resolve-Path $cargoPath).Path,
     $content,
-    [System.Text.Encoding]::UTF8
+    $utf8NoBom
 )
 Write-Log "Zaktualizowano Cargo.toml"
 
