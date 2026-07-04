@@ -26,7 +26,7 @@ export default function TaskEditor({ task, listId, onClose, parentTask, onBack, 
 
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
-  const [preview, setPreview] = useState(false)
+  const [preview, setPreview] = useState(true)
   const [sessions, setSessions] = useState<TimerSession[]>([])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -40,7 +40,7 @@ export default function TaskEditor({ task, listId, onClose, parentTask, onBack, 
     setLocalTask(task)
     setTitle(task.title)
     setDescription(task.description ?? '')
-    setPreview(false)
+    setPreview(true)
     setConfirmDelete(false)
     api.getTimerSessions(task.id).then(setSessions).catch(console.error)
     api.getSubtasks(task.id).then(setSubtasks).catch(console.error)
