@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
+import { getVersion } from '@tauri-apps/api/app'
 import { useSettingsStore } from '../store/settingsStore'
 
 type Theme = 'light' | 'dark' | 'system'
@@ -13,6 +14,11 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
 export default function Settings() {
   const { settings, setTheme, changeDataDir } = useSettingsStore()
   const [changing, setChanging] = useState(false)
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => setVersion(null))
+  }, [])
 
   async function handleChangeDir() {
     setChanging(true)
@@ -76,6 +82,12 @@ export default function Settings() {
           </button>
         </div>
       </section>
+      {/* About */}
+      {version && (
+        <p className="mt-12 text-xs text-gray-400 dark:text-gray-600">
+          Smart Todo v{version}
+        </p>
+      )}
     </div>
   )
 }
