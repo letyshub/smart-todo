@@ -37,6 +37,13 @@ export interface DashboardData {
   upcoming: Task[]
 }
 
+export interface ProductivityStats {
+  tasks_completed_week: number
+  total_seconds_week: number
+  on_time_count: number
+  late_count: number
+}
+
 export interface TimerSession {
   id: number
   task_id: number
