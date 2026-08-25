@@ -5,6 +5,7 @@ import { useListsStore } from '../store/listsStore'
 import { useTasksStore } from '../store/tasksStore'
 import TaskCard from '../components/TaskCard'
 import TaskEditor from '../components/TaskEditor'
+import { listToMarkdown } from '../lib/exportUtils'
 
 interface Props {
   listId: number
@@ -29,6 +30,7 @@ export default function ListDetail({ listId, onNavigate }: Props) {
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [confirmDeleteList, setConfirmDeleteList] = useState(false)
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState(false)
 
   useEffect(() => {
     loadList(listId)
@@ -105,6 +107,13 @@ export default function ListDetail({ listId, onNavigate }: Props) {
     onNavigate({ type: 'dashboard' })
   }
 
+  async function handleExport() {
+    const md = listToMarkdown(list?.title ?? 'Lista', listTasks)
+    await navigator.clipboard.writeText(md)
+    setCopyFeedback(true)
+    setTimeout(() => setCopyFeedback(false), 2000)
+  }
+
   return (
     <div className="flex h-full">
       <div className="flex-1 overflow-y-auto">
@@ -139,6 +148,14 @@ export default function ListDetail({ listId, onNavigate }: Props) {
               {list?.title ?? 'List'}
             </h2>
           )}
+
+          <button
+            onClick={handleExport}
+            className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded px-2 py-1 text-xs font-medium transition-colors shrink-0"
+            title="Eksportuj jako Markdown"
+          >
+            {copyFeedback ? 'Skopiowano!' : 'Eksportuj MD'}
+          </button>
 
           {confirmDeleteList ? (
             <div className="flex items-center gap-1 shrink-0">
