@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type {
   List, Task, Tag, DashboardData, TimerSession, ActiveTimer,
-  Settings, StartTimerResult,
+  Settings, StartTimerResult, ProductivityStats,
 } from '../types'
 
 export const api = {
@@ -29,6 +29,7 @@ export const api = {
   getChildTasks: (taskId: number) =>
     invoke<Task[]>('get_child_tasks', { taskId }),
   getDashboardTasks: () => invoke<DashboardData>('get_dashboard_tasks'),
+  getProductivityStats: () => invoke<ProductivityStats>('get_productivity_stats'),
   setTaskTags: (taskId: number, tagNames: string[]) =>
     invoke<Tag[]>('set_task_tags', { taskId, tagNames }),
   getAllTags: () => invoke<Tag[]>('get_all_tags'),
