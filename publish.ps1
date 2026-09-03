@@ -5,8 +5,10 @@
     Publish Smart Todo to the configured deploy directory.
 
 .DESCRIPTION
-    Auto-bumps patch version, builds with Tauri, backs up previous .exe,
-    deploys new .exe to the path defined in publish.config.ps1.
+    Auto-bumps patch version, builds with Tauri, backs up previous binary,
+    deploys new binary to the path defined in publish.config.ps1.
+
+    Supports Windows (.exe), macOS (.app bundle), and Linux (no extension).
 
     FIRST TIME SETUP:
     Copy publish.config.example.ps1 to publish.config.ps1 and set $DeployDir.
@@ -26,6 +28,24 @@ param()
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+if ($IsWindows) {
+    $ExeName   = "smart-todo.exe"
+    $BuildExe  = Join-Path "src-tauri" "target" "release" $ExeName
+    $Sep       = "\"
+} elseif ($IsMacOS) {
+    $ExeName   = "smart-todo.app"
+    $BuildExe  = Join-Path "src-tauri" "target" "release" "bundle" "macos" $ExeName
+    $Sep       = "/"
+} else {
+    # Linux
+    $ExeName   = "smart-todo"
+    $BuildExe  = Join-Path "src-tauri" "target" "release" $ExeName
+    $Sep       = "/"
+}
+
+# ---------------------------------------------------------------------------
 # Config — loaded from publish.config.ps1 (gitignored, copy from example)
 # ---------------------------------------------------------------------------
 $ConfigFile = Join-Path $PSScriptRoot "publish.config.ps1"
@@ -35,10 +55,8 @@ if (-not (Test-Path $ConfigFile)) {
 }
 . $ConfigFile
 
-$BackupDir = "$DeployDir\backups"
-$LogDir    = "$DeployDir\logs"
-$ExeName   = "smart-todo.exe"
-$BuildExe  = "src-tauri\target\release\$ExeName"
+$BackupDir = Join-Path $DeployDir "backups"
+$LogDir    = Join-Path $DeployDir "logs"
 
 # ---------------------------------------------------------------------------
 # Directories
@@ -51,7 +69,7 @@ New-Item -ItemType Directory -Force -Path $LogDir    | Out-Null
 # Logging
 # ---------------------------------------------------------------------------
 $LogTimestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$LogFile      = "$LogDir\publish-$LogTimestamp.log"
+$LogFile      = Join-Path $LogDir "publish-$LogTimestamp.log"
 
 function Write-Log {
     param([string]$Message)
@@ -62,6 +80,7 @@ function Write-Log {
 }
 
 Write-Log "=== Smart Todo Publish Script ==="
+Write-Log "Platform: $( if ($IsWindows) { 'Windows' } elseif ($IsMacOS) { 'macOS' } else { 'Linux' } )"
 
 # ---------------------------------------------------------------------------
 # Git status check
@@ -87,9 +106,9 @@ if ($gitStatus) {
 # ---------------------------------------------------------------------------
 # Version bump
 # ---------------------------------------------------------------------------
-$tauriConfPath = "src-tauri\tauri.conf.json"
+$tauriConfPath = Join-Path "src-tauri" "tauri.conf.json"
 $packagePath   = "package.json"
-$cargoPath     = "src-tauri\Cargo.toml"
+$cargoPath     = Join-Path "src-tauri" "Cargo.toml"
 
 $tauriConf  = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
 $oldVersion = $tauriConf.version
@@ -173,16 +192,27 @@ if ($LASTEXITCODE -ne 0) {
 Write-Log "git tag v$newVersion"
 
 # ---------------------------------------------------------------------------
-# Backup previous .exe
+# Backup previous binary
 # ---------------------------------------------------------------------------
-$deployExe = "$DeployDir\$ExeName"
-if (Test-Path $deployExe) {
-    $backupName = "smart-todo-$oldVersion.exe"
-    $backupPath = "$BackupDir\$backupName"
-    Copy-Item -Path $deployExe -Destination $backupPath -Force
-    Write-Log "Backup: $ExeName -> backups\$backupName"
+$deployTarget = Join-Path $DeployDir $ExeName
+if (Test-Path $deployTarget) {
+    $backupName = if ($IsMacOS) {
+        "smart-todo-$oldVersion.app"
+    } elseif ($IsWindows) {
+        "smart-todo-$oldVersion.exe"
+    } else {
+        "smart-todo-$oldVersion"
+    }
+    $backupPath = Join-Path $BackupDir $backupName
+    if ($IsMacOS) {
+        # .app is a directory bundle — use recursive copy
+        Copy-Item -Path $deployTarget -Destination $backupPath -Recurse -Force
+    } else {
+        Copy-Item -Path $deployTarget -Destination $backupPath -Force
+    }
+    Write-Log "Backup: $ExeName -> backups${Sep}$backupName"
 } else {
-    Write-Log "Brak poprzedniego .exe — pomijam backup (pierwsze wdrozenie)"
+    Write-Log "Brak poprzedniego pliku — pomijam backup (pierwsze wdrozenie)"
 }
 
 # ---------------------------------------------------------------------------
@@ -194,8 +224,16 @@ if (-not (Test-Path $BuildExe)) {
 }
 
 try {
-    Copy-Item -Path $BuildExe -Destination $deployExe -Force
-    Write-Log "Skopiowano: $ExeName -> $DeployDir\"
+    if ($IsMacOS) {
+        # .app is a directory bundle — remove old and copy recursively
+        if (Test-Path $deployTarget) {
+            Remove-Item -Path $deployTarget -Recurse -Force
+        }
+        Copy-Item -Path $BuildExe -Destination $deployTarget -Recurse -Force
+    } else {
+        Copy-Item -Path $BuildExe -Destination $deployTarget -Force
+    }
+    Write-Log "Skopiowano: $ExeName -> $DeployDir${Sep}"
 } catch {
     Write-Log "BLAD: Nie mozna skopiowac $ExeName — czy aplikacja jest uruchomiona?"
     Write-Log "Szczegoly: $_"

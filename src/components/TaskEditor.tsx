@@ -2,11 +2,18 @@ import { useState, useEffect } from 'react'
 import type { Task, Tag, TimerSession } from '../types'
 import { useTasksStore } from '../store/tasksStore'
 import { useTimerStore } from '../store/timerStore'
+import { useSettingsStore } from '../store/settingsStore'
+import { useResizablePanel } from '../hooks/useResizablePanel'
 import { api } from '../lib/tauri'
 import { formatTotal, formatLive } from '../lib/timeUtils'
 import MarkdownRenderer from './MarkdownRenderer'
 import TagInput from './TagInput'
 import TaskCard from './TaskCard'
+import ResizeHandle from './ResizeHandle'
+
+const DEFAULT_WIDTH = 320
+const MIN_WIDTH = 280
+const MAX_WIDTH = 640
 
 interface Props {
   task: Task
@@ -20,6 +27,15 @@ interface Props {
 export default function TaskEditor({ task, listId, onClose, parentTask, onBack, onOpenChildTask }: Props) {
   const { update, remove, setTags } = useTasksStore()
   const { activeTaskId, elapsedSeconds, start, stop } = useTimerStore()
+  const taskEditorWidth = useSettingsStore((s) => s.settings?.task_editor_width) ?? DEFAULT_WIDTH
+  const setTaskEditorWidth = useSettingsStore((s) => s.setTaskEditorWidth)
+  const { width, isDragging, handleProps } = useResizablePanel({
+    width: taskEditorWidth,
+    min: MIN_WIDTH,
+    max: MAX_WIDTH,
+    side: 'right',
+    onCommit: setTaskEditorWidth,
+  })
 
   const [localTask, setLocalTask] = useState<Task>(task)
   const isTimerActive = activeTaskId === localTask.id
@@ -151,7 +167,13 @@ export default function TaskEditor({ task, listId, onClose, parentTask, onBack, 
   const totalSeconds = localTask.total_seconds + (isTimerActive ? elapsedSeconds : 0)
 
   return (
-    <div className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-700 flex flex-col h-full overflow-hidden bg-white dark:bg-gray-900">
+    <div
+      className={`relative shrink-0 border-l border-gray-200 dark:border-gray-700 flex flex-col h-full overflow-hidden bg-white dark:bg-gray-900 ${
+        isDragging ? '' : 'transition-[width] duration-100'
+      }`}
+      style={{ width }}
+    >
+      <ResizeHandle side="right" isDragging={isDragging} {...handleProps} />
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2 min-w-0">

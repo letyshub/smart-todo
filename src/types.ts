@@ -37,6 +37,13 @@ export interface DashboardData {
   upcoming: Task[]
 }
 
+export interface ProductivityStats {
+  tasks_completed_week: number
+  total_seconds_week: number
+  on_time_count: number
+  late_count: number
+}
+
 export interface TimerSession {
   id: number
   task_id: number
@@ -53,6 +60,8 @@ export interface ActiveTimer {
 export interface Settings {
   theme: 'light' | 'dark' | 'system'
   data_dir: string | null
+  sidebar_width: number | null
+  task_editor_width: number | null
 }
 
 export interface StartTimerResult {
