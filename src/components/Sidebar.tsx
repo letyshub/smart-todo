@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import type { View } from '../App'
 import { useListsStore } from '../store/listsStore'
+import { useSettingsStore } from '../store/settingsStore'
+import { useResizablePanel } from '../hooks/useResizablePanel'
+import ResizeHandle from './ResizeHandle'
+
+const DEFAULT_WIDTH = 240
+const MIN_WIDTH = 200
+const MAX_WIDTH = 420
 
 interface Props {
   view: View
@@ -9,6 +16,15 @@ interface Props {
 
 export default function Sidebar({ view, onNavigate }: Props) {
   const { lists, create } = useListsStore()
+  const sidebarWidth = useSettingsStore((s) => s.settings?.sidebar_width) ?? DEFAULT_WIDTH
+  const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
+  const { width, isDragging, handleProps } = useResizablePanel({
+    width: sidebarWidth,
+    min: MIN_WIDTH,
+    max: MAX_WIDTH,
+    side: 'left',
+    onCommit: setSidebarWidth,
+  })
 
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -30,7 +46,13 @@ export default function Sidebar({ view, onNavigate }: Props) {
     }`
 
   return (
-    <aside className="w-60 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen p-3 gap-1">
+    <aside
+      className={`relative shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen p-3 gap-1 ${
+        isDragging ? '' : 'transition-[width] duration-100'
+      }`}
+      style={{ width }}
+    >
+      <ResizeHandle side="left" isDragging={isDragging} {...handleProps} />
       <h1 className="text-lg font-bold px-2 py-3 text-gray-900 dark:text-gray-100">Smart Todo</h1>
 
       <button

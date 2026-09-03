@@ -8,6 +8,8 @@ use tauri::State;
 pub struct Settings {
     pub theme: String,
     pub data_dir: Option<String>,
+    pub sidebar_width: Option<i32>,
+    pub task_editor_width: Option<i32>,
 }
 
 #[tauri::command]
@@ -24,6 +26,8 @@ pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
     Ok(Settings {
         theme: map.get("theme").cloned().unwrap_or_else(|| "system".to_string()),
         data_dir: map.get("data_dir").cloned(),
+        sidebar_width: map.get("sidebar_width").and_then(|v| v.parse().ok()),
+        task_editor_width: map.get("task_editor_width").and_then(|v| v.parse().ok()),
     })
 }
 

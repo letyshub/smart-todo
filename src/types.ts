@@ -60,6 +60,8 @@ export interface ActiveTimer {
 export interface Settings {
   theme: 'light' | 'dark' | 'system'
   data_dir: string | null
+  sidebar_width: number | null
+  task_editor_width: number | null
 }
 
 export interface StartTimerResult {
