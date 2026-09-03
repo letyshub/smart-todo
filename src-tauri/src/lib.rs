@@ -6,15 +6,17 @@ use commands::timer::TimerState;
 use std::sync::Mutex;
 use std::collections::HashMap;
 
-pub struct DbPath(pub String);
+/// Path of the currently open database file. Kept in a Mutex because
+/// `change_data_dir` swaps the connection at runtime.
+pub struct DbPath(pub Mutex<String>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_data_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("smart-todo");
-    std::fs::create_dir_all(&app_data_dir).unwrap();
-    let db_path = app_data_dir.join("data.db").to_string_lossy().to_string();
+    let db_file = db::resolve_db_path();
+    if let Some(parent) = db_file.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    let db_path = db_file.to_string_lossy().to_string();
     let conn = db::open(&db_path).expect("failed to open database");
 
     tauri::Builder::default()
@@ -23,7 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(DbState(Mutex::new(conn)))
         .manage(TimerState(Mutex::new(HashMap::new())))
-        .manage(DbPath(db_path))
+        .manage(DbPath(Mutex::new(db_path)))
         .invoke_handler(tauri::generate_handler![
             commands::lists::get_lists,
             commands::lists::create_list,
