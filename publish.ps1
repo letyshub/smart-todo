@@ -31,18 +31,25 @@ $ErrorActionPreference = "Stop"
 # Platform detection
 # ---------------------------------------------------------------------------
 if ($IsWindows) {
-    $ExeName   = "smart-todo.exe"
-    $BuildExe  = Join-Path "src-tauri" "target" "release" $ExeName
-    $Sep       = "\"
+    $ExeName    = "smart-todo.exe"
+    $BuildExe   = Join-Path "src-tauri" "target" "release" $ExeName
+    $Sep        = "\"
+    $BuildArgs  = @()
 } elseif ($IsMacOS) {
-    $ExeName   = "smart-todo.app"
-    $BuildExe  = Join-Path "src-tauri" "target" "release" "bundle" "macos" $ExeName
-    $Sep       = "/"
+    $ExeName    = "smart-todo.app"
+    $BuildExe   = Join-Path "src-tauri" "target" "release" "bundle" "macos" $ExeName
+    $Sep        = "/"
+    # Only the .app is deployed, so skip the .dmg. Building it costs ~40s and
+    # fails intermittently: bundle_dmg.sh cannot always unmount its scratch
+    # volume (hdiutil detach returns EBUSY while Spotlight indexes it), which
+    # would abort an otherwise successful publish.
+    $BuildArgs  = @("--bundles", "app")
 } else {
     # Linux
-    $ExeName   = "smart-todo"
-    $BuildExe  = Join-Path "src-tauri" "target" "release" $ExeName
-    $Sep       = "/"
+    $ExeName    = "smart-todo"
+    $BuildExe   = Join-Path "src-tauri" "target" "release" $ExeName
+    $Sep        = "/"
+    $BuildArgs  = @()
 }
 
 # ---------------------------------------------------------------------------
@@ -170,8 +177,8 @@ Write-Log "git commit: chore: bump version to $newVersion"
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-Write-Log "npx tauri build — start (moze potrwac kilka minut)"
-npx tauri build
+Write-Log "npx tauri build $($BuildArgs -join ' ') — start (moze potrwac kilka minut)"
+npx tauri build @BuildArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Log "BLAD: npx tauri build zakonczony kodem $LASTEXITCODE"
     Write-Log "Wersja jest juz zacommitowana jako $newVersion."
