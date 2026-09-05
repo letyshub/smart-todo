@@ -59,9 +59,47 @@ export interface ActiveTimer {
 
 export interface Settings {
   theme: 'light' | 'dark' | 'system'
-  data_dir: string | null
+  /** Always local. Sharing between machines is the sync folder's job. */
+  database_path: string
   sidebar_width: number | null
   task_editor_width: number | null
+}
+
+export interface SyncPeer {
+  device_id: string
+  name: string
+  platform: string
+  last_seen: string
+}
+
+export interface SyncStatus {
+  folder: string | null
+  device_name: string
+  peers: SyncPeer[]
+  open_conflicts: number
+  waiting: number
+}
+
+export interface SyncReport {
+  pushed: number
+  applied: number
+  conflicts: number
+  waiting: number
+}
+
+/** One field two machines changed independently. */
+export interface SyncConflict {
+  id: number
+  entity: string
+  uuid: string
+  field: string
+  /** Name of the row the conflict is on, e.g. the task title. */
+  subject: string
+  /** JSON-encoded value that won. */
+  kept: string
+  /** JSON-encoded value that was overridden on this machine. */
+  discarded: string
+  detected_at: string
 }
 
 export interface StartTimerResult {

@@ -6,7 +6,6 @@ interface SettingsStore {
   settings: Settings | null
   load: () => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
-  changeDataDir: (path: string) => Promise<void>
   setSidebarWidth: (width: number) => Promise<void>
   setTaskEditorWidth: (width: number) => Promise<void>
 }
@@ -22,10 +21,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     await api.setSetting('theme', theme)
     set((s) => ({ settings: s.settings ? { ...s.settings, theme } : null }))
     applyTheme(theme)
-  },
-  changeDataDir: async (path) => {
-    await api.changeDataDir(path)
-    set((s) => ({ settings: s.settings ? { ...s.settings, data_dir: path } : null }))
   },
   setSidebarWidth: async (width) => {
     set((s) => ({ settings: s.settings ? { ...s.settings, sidebar_width: width } : null }))
