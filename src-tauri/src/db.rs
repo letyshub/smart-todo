@@ -15,38 +15,73 @@ pub fn config_dir() -> PathBuf {
         .join("smart-todo")
 }
 
-/// Data directory chosen by the user, or None to use the default (config dir).
+/// Directory an older version was told to keep the database in.
 ///
-/// The pointer lives in a plain file rather than the `settings` table because
-/// reading it from SQLite would require already knowing which database to open.
-/// A pointer to a directory that no longer exists (cloud folder not synced yet)
-/// is ignored, so we fall back to the local database instead of silently
-/// creating an empty one inside a half-synced folder.
-pub fn read_data_dir() -> Option<PathBuf> {
-    read_data_dir_in(&config_dir())
-}
-
-fn read_data_dir_in(config: &Path) -> Option<PathBuf> {
+/// Read only to migrate away from it: hosting the database in a cloud-synced
+/// folder is what corrupted it, so the path is now used as a sync folder and
+/// the database itself comes home.
+fn legacy_data_dir_in(config: &Path) -> Option<PathBuf> {
     let raw = std::fs::read_to_string(config.join(POINTER_FILE)).ok()?;
     let dir = PathBuf::from(raw.trim());
-    if dir.as_os_str().is_empty() || !dir.is_dir() {
-        return None;
-    }
-    Some(dir)
+    (!dir.as_os_str().is_empty() && dir.is_dir()).then_some(dir)
 }
 
-pub fn write_data_dir(dir: &Path) -> std::io::Result<()> {
-    write_data_dir_in(&config_dir(), dir)
-}
-
-fn write_data_dir_in(config: &Path, dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(config)?;
-    std::fs::write(config.join(POINTER_FILE), dir.to_string_lossy().as_bytes())
-}
-
-/// Full path to the database file the app should open on startup.
+/// Full path to the database file. Always local: never a network share, never
+/// a folder a cloud client writes to.
 pub fn resolve_db_path() -> PathBuf {
-    read_data_dir().unwrap_or_else(config_dir).join(DB_FILE)
+    config_dir().join(DB_FILE)
+}
+
+/// What the app has to do before it can open the database.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Startup {
+    pub db_path: PathBuf,
+    /// A directory that used to hold the database and should now be adopted as
+    /// the sync folder, with the local database published into it.
+    pub adopt_sync_dir: Option<PathBuf>,
+}
+
+/// Move a database that an earlier version left in a cloud folder back to local
+/// storage, and remember that folder so sync can keep using it.
+///
+/// The copy in the cloud folder is deliberately left where it is: it costs
+/// nothing and is the obvious thing to fall back on if anything here surprises
+/// the user.
+pub fn plan_startup_in(config: &Path) -> Startup {
+    let local = config.join(DB_FILE);
+    let Some(legacy) = legacy_data_dir_in(config) else {
+        return Startup { db_path: local, adopt_sync_dir: None };
+    };
+    let legacy_db = legacy.join(DB_FILE);
+
+    if !local.exists() && legacy_db.exists() {
+        let _ = std::fs::create_dir_all(config);
+        // Recent writes may still be sitting in the cloud copy's -wal file;
+        // folding them in first is the difference between migrating the user's
+        // data and migrating a stale snapshot of it.
+        if let Ok(old) = Connection::open(&legacy_db) {
+            let _ = checkpoint(&old);
+        }
+        if std::fs::copy(&legacy_db, &local).is_ok() {
+            // Sidecars belonging to the cloud copy describe a different file and
+            // would be applied to ours as if they were ours.
+            for ext in ["-wal", "-shm"] {
+                let mut sidecar = local.clone().into_os_string();
+                sidecar.push(ext);
+                let _ = std::fs::remove_file(PathBuf::from(sidecar));
+            }
+        }
+    }
+
+    let already_syncing = crate::sync::read_folder(config).is_some();
+    Startup {
+        db_path: local,
+        adopt_sync_dir: (!already_syncing).then_some(legacy),
+    }
+}
+
+pub fn plan_startup() -> Startup {
+    plan_startup_in(&config_dir())
 }
 
 pub fn open(path: &str) -> Result<Connection> {
@@ -128,6 +163,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'todo'",
         [],
     ).ok();
+    // Sync tables, uuid columns and the change-capture triggers.
+    crate::sync::schema::migrate(conn)?;
     Ok(())
 }
 
@@ -187,21 +224,68 @@ mod tests {
     }
 
     #[test]
-    fn test_data_dir_pointer_roundtrip() {
+    fn test_startup_is_local_only_when_nothing_was_configured() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plan = plan_startup_in(tmp.path());
+        assert_eq!(plan.db_path, tmp.path().join(DB_FILE));
+        assert_eq!(plan.adopt_sync_dir, None);
+    }
+
+    #[test]
+    fn test_a_database_left_in_a_cloud_folder_is_brought_home() {
+        // The upgrade path for everyone hitting corruption today: the database
+        // moves to local storage and the cloud folder becomes the sync folder.
         let tmp = tempfile::tempdir().unwrap();
         let config = tmp.path().join("config");
-        let target = tmp.path().join("not-synced-yet");
+        let cloud = tmp.path().join("OneDrive/smart-todo");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::create_dir_all(&cloud).unwrap();
 
-        assert!(read_data_dir_in(&config).is_none(), "no pointer yet");
+        let cloud_db = cloud.join(DB_FILE);
+        let conn = open(cloud_db.to_str().unwrap()).unwrap();
+        conn.execute("INSERT INTO lists(title) VALUES('Praca')", []).unwrap();
+        checkpoint(&conn).unwrap();
+        drop(conn);
+        std::fs::write(config.join(POINTER_FILE), cloud.to_string_lossy().as_bytes()).unwrap();
 
-        write_data_dir_in(&config, &target).unwrap();
-        // A pointer at a directory that does not exist (cloud folder still
-        // syncing) must not be honoured, or we would create a second, empty
-        // database there and the user would see no tasks.
-        assert!(read_data_dir_in(&config).is_none(), "missing dir ignored");
+        let plan = plan_startup_in(&config);
 
-        std::fs::create_dir_all(&target).unwrap();
-        assert_eq!(read_data_dir_in(&config).as_deref(), Some(target.as_path()));
+        assert_eq!(plan.db_path, config.join(DB_FILE));
+        assert_eq!(plan.adopt_sync_dir.as_deref(), Some(cloud.as_path()));
+        let local = Connection::open(plan.db_path).unwrap();
+        let rows: i64 = local
+            .query_row("SELECT COUNT(*) FROM lists", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 1, "the migrated database keeps the user's data");
+        assert!(cloud_db.exists(), "the old copy stays as a fallback");
+    }
+
+    #[test]
+    fn test_an_existing_local_database_is_never_overwritten_by_the_cloud_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = tmp.path().join("config");
+        let cloud = tmp.path().join("cloud");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::create_dir_all(&cloud).unwrap();
+
+        let local = open(config.join(DB_FILE).to_str().unwrap()).unwrap();
+        local.execute("INSERT INTO lists(title) VALUES('Local')", []).unwrap();
+        checkpoint(&local).unwrap();
+        drop(local);
+
+        let cloud_conn = open(cloud.join(DB_FILE).to_str().unwrap()).unwrap();
+        cloud_conn.execute("INSERT INTO lists(title) VALUES('Cloud')", []).unwrap();
+        checkpoint(&cloud_conn).unwrap();
+        drop(cloud_conn);
+        std::fs::write(config.join(POINTER_FILE), cloud.to_string_lossy().as_bytes()).unwrap();
+
+        plan_startup_in(&config);
+
+        let conn = Connection::open(config.join(DB_FILE)).unwrap();
+        let title: String = conn
+            .query_row("SELECT title FROM lists", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "Local", "local work wins; the cloud copy is merged in by sync");
     }
 
     #[test]
