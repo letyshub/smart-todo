@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
   List, Task, Tag, DashboardData, TimerSession, ActiveTimer,
   Settings, StartTimerResult, ProductivityStats,
+  SyncStatus, SyncReport, SyncConflict,
 } from '../types'
 
 export const api = {
@@ -42,5 +43,14 @@ export const api = {
 
   getSettings: () => invoke<Settings>('get_settings'),
   setSetting: (key: string, value: string) => invoke<void>('set_setting', { key, value }),
-  changeDataDir: (newPath: string) => invoke<void>('change_data_dir', { newPath }),
+
+  getSyncStatus: () => invoke<SyncStatus>('get_sync_status'),
+  setSyncFolder: (path: string) => invoke<SyncReport>('set_sync_folder', { path }),
+  disableSync: () => invoke<void>('disable_sync'),
+  syncNow: () => invoke<SyncReport>('sync_now'),
+  setDeviceName: (name: string) => invoke<void>('set_device_name', { name }),
+
+  getConflicts: () => invoke<SyncConflict[]>('get_conflicts'),
+  resolveConflict: (id: number, restoreDiscarded: boolean) =>
+    invoke<void>('resolve_conflict', { id, restoreDiscarded }),
 }
