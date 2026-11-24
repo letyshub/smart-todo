@@ -4,6 +4,8 @@ export interface List {
   color: string | null
   position: number
   created_at: string
+  task_total?: number
+  task_completed?: number
 }
 
 export interface Tag {
@@ -29,6 +31,8 @@ export interface Task {
   status: 'todo' | 'inprogress' | 'done'
   tags: Tag[]
   total_seconds: number
+  subtask_total?: number
+  subtask_completed?: number
 }
 
 export interface DashboardData {

@@ -25,7 +25,7 @@ interface Props {
 }
 
 export default function TaskEditor({ task, listId, onClose, parentTask, onBack, onOpenChildTask }: Props) {
-  const { update, remove, setTags } = useTasksStore()
+  const { update, remove, setTags, loadList, loadDashboard } = useTasksStore()
   const { activeTaskId, elapsedSeconds, start, stop } = useTimerStore()
   const taskEditorWidth = useSettingsStore((s) => s.settings?.task_editor_width) ?? DEFAULT_WIDTH
   const setTaskEditorWidth = useSettingsStore((s) => s.setTaskEditorWidth)
@@ -127,22 +127,32 @@ export default function TaskEditor({ task, listId, onClose, parentTask, onBack, 
     onClose()
   }
 
+  async function refreshParentTask() {
+    await loadList(listId)
+    if (useTasksStore.getState().dashboard) {
+      await loadDashboard()
+    }
+  }
+
   async function handleAddSubtask() {
     const t = newSubtask.trim()
     if (!t) return
     const subtask = await api.createSubtask(localTask.id, t)
     setSubtasks((prev) => [...prev, subtask])
     setNewSubtask('')
+    await refreshParentTask()
   }
 
   async function handleToggleSubtask(subtask: Task) {
     const updated = await api.updateTask(subtask.id, { completed: !subtask.completed })
     setSubtasks((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    await refreshParentTask()
   }
 
   async function handleDeleteSubtask(subtask: Task) {
     await api.deleteTask(subtask.id)
     setSubtasks((prev) => prev.filter((s) => s.id !== subtask.id))
+    await refreshParentTask()
   }
 
   async function handleAddChildTask() {
@@ -300,14 +310,38 @@ export default function TaskEditor({ task, listId, onClose, parentTask, onBack, 
 
         {/* Subtasks (lightweight checkboxes) */}
         <div>
-          <span className="text-xs text-gray-500 block mb-2">
-            Subtasks
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-gray-500">
+              Subtasks
+              {subtasks.length > 0 && (
+                <span className="ml-1 text-gray-400">
+                  ({subtasks.filter((s) => s.completed).length}/{subtasks.length})
+                </span>
+              )}
+            </span>
             {subtasks.length > 0 && (
-              <span className="ml-1 text-gray-400">
-                ({subtasks.filter((s) => s.completed).length}/{subtasks.length})
+              <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                {Math.round((subtasks.filter((s) => s.completed).length / subtasks.length) * 100)}%
               </span>
             )}
-          </span>
+          </div>
+          {subtasks.length > 0 && (() => {
+            const pct = Math.round((subtasks.filter((s) => s.completed).length / subtasks.length) * 100)
+            return (
+              <div
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2"
+              >
+                <div
+                  className="h-full bg-indigo-500 dark:bg-indigo-400 transition-all duration-200"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            )
+          })()}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2 py-1 group/subtask">
               <input

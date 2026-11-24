@@ -81,4 +81,18 @@ describe('TaskCard', () => {
     expect(onToggleComplete).toHaveBeenCalledWith(baseTask)
     expect(onOpen).not.toHaveBeenCalled()
   })
+
+  it('does not show subtask progress bar when task has no subtasks', () => {
+    render(<TaskCard task={{ ...baseTask, subtask_total: 0, subtask_completed: 0 }} onOpen={vi.fn()} onToggleComplete={vi.fn()} />)
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
+
+  it('shows subtask progress bar and percentage when task has subtasks', () => {
+    const task = { ...baseTask, subtask_total: 4, subtask_completed: 3 }
+    render(<TaskCard task={task} onOpen={vi.fn()} onToggleComplete={vi.fn()} />)
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toBeTruthy()
+    expect(bar.getAttribute('aria-valuenow')).toBe('75')
+    expect(screen.getByText('75%')).toBeTruthy()
+  })
 })
