@@ -13,6 +13,9 @@ interface Props {
 export default function TaskCard({ task, onOpen, onToggleComplete, onDelete }: Props) {
   const overdue = !task.completed && isOverdue(task.due_date)
   const dueToday = !task.completed && isDueToday(task.due_date)
+  const subtaskTotal = task.subtask_total ?? 0
+  const subtaskCompleted = task.subtask_completed ?? 0
+  const subtaskPercent = subtaskTotal > 0 ? Math.round((subtaskCompleted / subtaskTotal) * 100) : 0
 
   return (
     <div
@@ -41,6 +44,26 @@ export default function TaskCard({ task, onOpen, onToggleComplete, onDelete }: P
             {task.title}
           </span>
         </div>
+
+        {subtaskTotal > 0 && (
+          <div className="flex items-center gap-2 mt-1">
+            <div
+              role="progressbar"
+              aria-valuenow={subtaskPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="w-24 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"
+            >
+              <div
+                className="h-full bg-indigo-500 dark:bg-indigo-400 transition-all duration-200"
+                style={{ width: `${subtaskPercent}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              {subtaskPercent}%
+            </span>
+          </div>
+        )}
 
         {task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">

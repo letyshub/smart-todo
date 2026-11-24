@@ -31,11 +31,19 @@ export const useTasksStore = create<TasksStore>((set) => ({
   },
   update: async (id, listId, fields) => {
     const updated = await api.updateTask(id, fields)
+    const updateTaskInList = (arr: Task[]) => arr.map((t) => (t.id === id ? updated : t))
     set((s) => ({
       tasks: {
         ...s.tasks,
-        [listId]: (s.tasks[listId] ?? []).map((t) => (t.id === id ? updated : t)),
+        [listId]: updateTaskInList(s.tasks[listId] ?? []),
       },
+      dashboard: s.dashboard
+        ? {
+            overdue: updateTaskInList(s.dashboard.overdue),
+            high_priority: updateTaskInList(s.dashboard.high_priority),
+            upcoming: updateTaskInList(s.dashboard.upcoming),
+          }
+        : null,
     }))
     return updated
   },

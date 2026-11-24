@@ -27,6 +27,8 @@ pub struct Task {
     pub status: String,
     pub tags: Vec<Tag>,
     pub total_seconds: i64,
+    pub subtask_total: i64,
+    pub subtask_completed: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +63,16 @@ fn fetch_total_seconds(conn: &rusqlite::Connection, task_id: i64) -> i64 {
     .unwrap_or(0)
 }
 
+fn fetch_subtask_counts(conn: &rusqlite::Connection, task_id: i64) -> (i64, i64) {
+    conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN completed != 0 THEN 1 ELSE 0 END), 0)
+         FROM tasks WHERE parent_task_id = ?1 AND is_subtask = 1",
+        rusqlite::params![task_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap_or((0, 0))
+}
+
 // SELECT column order: 0=id 1=list_id 2=title 3=description 4=priority 5=due_date
 //   6=completed 7=completed_at 8=position 9=created_at 10=updated_at
 //   11=parent_task_id 12=is_subtask 13=status
@@ -72,6 +84,7 @@ fn row_to_task(row: &rusqlite::Row, conn: &rusqlite::Connection) -> rusqlite::Re
     let id: i64 = row.get(0)?;
     let tags = fetch_tags_for_task(conn, id);
     let total_seconds = fetch_total_seconds(conn, id);
+    let (subtask_total, subtask_completed) = fetch_subtask_counts(conn, id);
     Ok(Task {
         id,
         list_id: row.get(1)?,
@@ -89,6 +102,8 @@ fn row_to_task(row: &rusqlite::Row, conn: &rusqlite::Connection) -> rusqlite::Re
         status: row.get(13)?,
         tags,
         total_seconds,
+        subtask_total,
+        subtask_completed,
     })
 }
 
@@ -506,5 +521,33 @@ mod tests {
             |r| r.get(0),
         ).unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_task_includes_subtask_counts() {
+        let (conn, list_id) = setup();
+        conn.execute(
+            "INSERT INTO tasks (list_id, title, priority, position) VALUES (?1, 'Parent', 'normal', 0)",
+            rusqlite::params![list_id],
+        ).unwrap();
+        let parent_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, completed, position) VALUES (?1, ?2, 1, 'Sub1', 1, 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, completed, position) VALUES (?1, ?2, 1, 'Sub2', 0, 1)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+        // Child task (is_subtask = 0) should not count as subtask
+        conn.execute(
+            "INSERT INTO tasks (list_id, parent_task_id, is_subtask, title, completed, position) VALUES (?1, ?2, 0, 'Child', 1, 0)",
+            rusqlite::params![list_id, parent_id],
+        ).unwrap();
+
+        let sql = format!("SELECT {} FROM tasks WHERE id=?1", super::TASK_COLS);
+        let task = conn.query_row(&sql, rusqlite::params![parent_id], |row| super::row_to_task(row, &conn)).unwrap();
+        assert_eq!(task.subtask_total, 2);
+        assert_eq!(task.subtask_completed, 1);
     }
 }

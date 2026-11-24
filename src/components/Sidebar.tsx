@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { View } from '../App'
 import { useListsStore } from '../store/listsStore'
+import { useTasksStore } from '../store/tasksStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useResizablePanel } from '../hooks/useResizablePanel'
 import ResizeHandle from './ResizeHandle'
@@ -16,6 +17,7 @@ interface Props {
 
 export default function Sidebar({ view, onNavigate }: Props) {
   const { lists, create } = useListsStore()
+  const tasksByList = useTasksStore((s) => s.tasks)
   const sidebarWidth = useSettingsStore((s) => s.settings?.sidebar_width) ?? DEFAULT_WIDTH
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
   const { width, isDragging, handleProps } = useResizablePanel({
@@ -65,19 +67,49 @@ export default function Sidebar({ view, onNavigate }: Props) {
       <hr className="border-gray-200 dark:border-gray-700 my-1" />
 
       <div className="flex-1 overflow-y-auto space-y-0.5">
-        {lists.map((list) => (
-          <button
-            key={list.id}
-            className={`${navItem(view.type === 'list' && view.id === list.id)} w-full`}
-            onClick={() => onNavigate({ type: 'list', id: list.id })}
-          >
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: list.color ?? '#6366f1' }}
-            />
-            <span className="truncate flex-1 text-left">{list.title}</span>
-          </button>
-        ))}
+        {lists.map((list) => {
+          const loadedTasks = tasksByList[list.id]
+          const total = loadedTasks ? loadedTasks.length : (list.task_total ?? 0)
+          const completed = loadedTasks
+            ? loadedTasks.filter((t) => t.completed).length
+            : (list.task_completed ?? 0)
+          const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+
+          return (
+            <button
+              key={list.id}
+              className={`${navItem(view.type === 'list' && view.id === list.id)} w-full flex-col items-stretch gap-1`}
+              onClick={() => onNavigate({ type: 'list', id: list.id })}
+            >
+              <div className="flex items-center gap-2 w-full">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: list.color ?? '#6366f1' }}
+                />
+                <span className="truncate flex-1 text-left">{list.title}</span>
+                {total > 0 && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                    {percent}%
+                  </span>
+                )}
+              </div>
+              {total > 0 && (
+                <div
+                  role="progressbar"
+                  aria-valuenow={percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="w-full h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"
+                >
+                  <div
+                    className="h-full bg-indigo-500 dark:bg-indigo-400 transition-all duration-200"
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              )}
+            </button>
+          )
+        })}
 
         {adding ? (
           <form
